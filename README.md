@@ -1,6 +1,265 @@
 ## Welcome to Phillips Project #2
 We are givin a battleship game emulator that we have to code a bot to play and win the game for us. The bot should not access where the ships are located (so it cant cheat) it should use set conditions to narrow down possible ship locations. We are givin 15 files which we are only allowed to change the bot file because that is the only file we submit to class. We compete against other classmates on who can make the most efficeint bot for the game inorder to get better project grades.
+### My bot file
+```markdown
+/*
+Author: Phillip Chen
+Course: 135
+Instructor: Alex Nikolaev
+Assignment: Project 2
 
+This program gives coordinates to shoot in a battleship simulation.
+My shots goes from left to right, and fires down if two hits are vertical
+There are predictions so that this program will remove impossible spaces to beat the game
+in the least amount of rounds as possible
+*/
+
+#include <cstdlib>
+#include <iostream>
+#include "bot.h"
+#include "screen.h"
+#include <fstream>
+using namespace std;
+
+int ROWS;
+int COLS;
+int grid[100][100]; // A global array to record hit and miss records
+int iter = 0;       //miss is 1 and hit is -1
+bool vertical = false;
+int pre_c;
+int pre_r;
+int r; 
+int c;
+int re_hit = 0;
+int re_shot = 0; 
+bool missing = false;
+bool OnlyShipsBiggerThanOne = false;
+bool ShotLeft = false;
+bool ShotUp = false;
+bool ShotRight = false;
+bool ShotDown = false;
+int ShipLength = 0;
+/* Initialization procedure, called when the game starts:
+
+   init (rows, cols, num, screen, log) 
+ 
+   Arguments:
+    rows, cols = the boards size
+    num        = the number of ships 
+    screen     = a screen to update your knowledge about the game
+    log        = a cout-like output stream
+*/
+void init(int rows, int cols, int num, Screen &screen, ostream &log) 
+{
+  ROWS = rows;
+  COLS = cols;
+  log << "Start." << endl;
+}
+
+
+/* The procedure handling each turn of the game:
+ 
+   next_turn(sml, lrg, num, gun, screen, log)
+ 
+   Arguments:
+    sml, lrg = the sizes of the smallest and the largest ships that are currently alive
+    num      = the number of ships that are currently alive
+    gun      = a gun.
+               Call gun.shoot(row, col) to shoot: 
+                  Can be shot only once per turn. 
+                  Returns MISS, HIT, HIT_N_SUNK, ALREADY_HIT, or ALREADY_SHOT.
+    screen   = a screen to update your knowledge about the game
+    log      = a cout-like output stream
+*/
+void next_turn(int sml, int lrg, int num, Gun &gun, Screen &screen, ostream &log){
+
+	//this is to fill the array within the boundaries of cols and rows with zeros
+	if (iter == 0){
+		for(int i = 0; i < COLS; i++){
+			for(int j = 0;j < ROWS; j++){
+				grid[i][j] = 0;
+			}
+		}
+	}
+
+	pre_r = r;
+	pre_c = c;
+
+	r = iter / COLS;
+	c = iter % COLS;
+	iter += 1;
+
+	//this loop will give the coordinates of vertical ships
+	//this loop will only activate if two vertical spots are hit 
+	//(bool "vertical" is in "HIT" loop below) 
+	//then it will give directions to shoot down
+	if (vertical == true && OnlyShipsBiggerThanOne == false){
+    		r = pre_r + 1;
+    		c = pre_c;
+    		iter -= 1;
+    	}
+	
+	if ( OnlyShipsBiggerThanOne == true && vertical == false && ShotLeft == false && ShotRight == false && ShotUp == false && ShotDown == false ){
+		iter = iter + sml -1;
+		}
+
+	if ( ShotLeft == true ){
+		r = pre_r ;
+    		c = pre_c - 1;
+		iter -= 1;
+		}
+	if ( ShotRight == true ){
+		r = pre_r;
+    		c = pre_c + 1;
+		}
+	if ( ShotUp == true ){
+		r = pre_r - 1;
+    		c = pre_c;
+		iter -= 1;
+		}
+	if ( ShotDown == true ){
+    		r = pre_r + 1;
+    		c = pre_c;
+		iter -= 1;
+		}
+	
+	//I made an array to keep track of misses(1), hits(-1), and hit_sinks(2)
+	//This loop makes sure the program skips spaces that were predicted misses and
+	//spots that are alright shot at
+  	while(grid[r][c]==1 ||grid[r][c]==-1 ||grid[r][c]==-2){	
+		if(grid[r][c]==1){screen.mark(r, c, 'x', GRAY);}
+		if(grid[r][c]==-1){screen.mark(r, c, '@', GRAY);}
+		if(grid[r][c]==-2){screen.mark(r, c, 'S', GRAY);}
+
+		//if the loop above casues the next shot to shoot outside the grid(to the right),
+		//go down one row and restart at column 0
+		if( c >= COLS ){	
+			c = 0;
+			r+=1;
+			iter +=1;
+		}
+  	}
+		
+	log << "Smallest: " << sml << " Largest: " << lrg << ". ";
+	log << "Shoot at " << r << " " << c ;
+	result res = gun.shoot(r, c);
+
+	if ( sml > 1 ){
+		OnlyShipsBiggerThanOne = true;
+		}
+
+	//If shoot misses, then mark as 1
+	if (res == MISS){
+		grid[r][c]=1;
+    		screen.mark(r, c, 'x', BLUE);
+		if(ShotLeft == true){
+			ShotLeft = false;
+			ShotUp = true;
+		}
+		if(ShotUp == true){
+			ShotUp = false;
+			ShotDown =true;
+		}
+		if(ShotDown == true){
+			ShotDown = false;
+		}
+	}
+
+	//If shoot hits, then mark as -1
+	else if (res == HIT){
+		grid[r][c]=-1;
+		screen.mark(r, c, '@', GREEN);
+      		
+		//if the before and current spots are hits, then the 2 spots underneth are impossible
+      		if(grid[r][c-1]==-1 && grid[r][c]==-1){
+			grid[r+1][c-1]=1;						
+			grid[r+1][c]=1;
+			screen.mark(r+1, c-1, 'x', GREEN);
+			screen.mark(r+1, c, 'x', GREEN);
+		}
+
+		//If the above and current spots are hits, then spots on the left and the right of current are impossible
+		//This loop also makes a bool true to activate a loop above to shoot down until vertical ship sinks
+		if(grid[r-1][c]==-1 && grid [r][c]==-1){
+			vertical = true;
+			grid[r][c+1]=1;
+			grid[r][c-1]=1;
+			screen.mark(r, c+1, 'x', GREEN);
+			screen.mark(r, c-1, 'x', GREEN);
+		}
+
+		// When There are ships bigger than one then the program changes
+		// and points will be determined by incrementing along the grid by
+		// the length of the smallest ship
+		if (OnlyShipsBiggerThanOne == true){
+		
+			
+
+			if (ShotUp == true && r+1 >=0 && (grid[r+1][c]==1 ||grid[r+1][c]==0)){
+				ShotUp = false;
+				ShotDown = true;
+				}
+			if (ShotDown =false && r-1 >=0 && (grid[r-1][c]==1 ||grid[r-1][c]==0)){
+				ShotRight = false;
+				ShotUp = true;
+				}
+			if (ShotDown = false && ShotUp == false && c+1 >=0 && (grid[r][c+1]==1 ||grid[r][c+1]==0)){
+				ShotLeft = false;
+				ShotRight = true;
+				}
+			if (ShotDown = false && ShotUp == false && ShotRight == false 
+				&& c-1 >=0 && (grid[r][c-1]==1 ||grid[r][c-1]==0){
+				ShotLeft = false;
+				
+				}
+			if (ShotDown = false && ShotUp == false && ShotRight == false 
+				&& c-1 >=0 && (grid[r][c-1]==0){
+				ShotLeft = true;
+		}			
+	}
+
+	//If the shot destories the boat, then mark that location with -2
+  	else if (res == HIT_N_SUNK){
+		screen.mark(r, c, 'S', RED);
+		grid[r][c]=-2;	
+
+		//Changes the bool to revert back to shooting horizontal after the
+		//vertical ship is destoried
+		vertical = false;
+
+        	if(grid[r][c+1]!=-1){grid[r][c+1]=1;	screen.mark(r, c+1, 'x', GREEN);} // when its hit and sink it means spots above, below,left,right side 
+		if(grid[r][c-1]!=-1){grid[r][c-1]=1;	screen.mark(r, c-1, 'x', GREEN);} // are impossible spots
+		if(grid[r+1][c]!=-1){grid[r+1][c]=1;	screen.mark(r+1, c, 'x', GREEN);}
+		if(grid[r-1][c]!=-1){grid[r-1][c]=1	;screen.mark(r-1, c, 'x', GREEN);}
+
+		//if the before and current spots are hit, then the 2 spots underneth are impossible
+		if(grid[r][c-1]==-1 && grid[r][c]==-2){
+			grid[r+1][c-1]=1;						
+			grid[r+1][c]=1;
+			screen.mark(r+1, c-1, 'x', GREEN);
+			screen.mark(r+1, c, 'x', GREEN);
+		}
+			ShotDown = false;
+	}
+	
+	//If shot already hit a ship, indicate that it did
+	else if (res == ALREADY_HIT){
+		re_hit++;	
+		}
+
+	//If shot already shot more than once, indicate that it did
+	else if (res == ALREADY_SHOT){
+		re_shot++;
+		}
+
+	log<<" re_shot "<<re_hit<<" re_shot "<<re_shot
+	<<" "<<ShotLeft<<" "
+	<<" "<<ShotRight<<" "
+	<<" "<<ShotUp<<" "
+	<<" "<<ShotDown<<" "
+	<<endl;
+}
+```
 ### original Bot file
 ```markdown
 #include <cstdlib>
